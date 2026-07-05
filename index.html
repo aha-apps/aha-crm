@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="description" content="AHA CRM — CRM minimalista offline con pipeline Kanban">
+  <title>AHA CRM</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232563eb'/%3E%3Ctext x='16' y='23' text-anchor='middle' fill='white' font-size='20' font-weight='bold'%3EC%3C/text%3E%3C/svg%3E">
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="assets/css/tailwind.min.css">
+  <link rel="stylesheet" href="assets/css/daisyui.min.css">
+  <link rel="stylesheet" href="assets/css/bootstrap-icons.css">
+  <link rel="stylesheet" href="assets/css/animate.min.css">
+
+  <style>
+    [x-cloak] { display: none !important; }
+    body { font-family: var(--font-family, 'Inter', system-ui, sans-serif); }
+    .sidebar-link.active-link {
+      background-color: hsl(var(--p) / 0.15) !important;
+      color: hsl(var(--p)) !important;
+    }
+    .kanban-column {
+      min-height: 300px;
+      transition: background-color 0.2s;
+    }
+    .kanban-column.drag-over {
+      background-color: hsl(var(--p) / 0.08) !important;
+    }
+    .kanban-card {
+      cursor: grab;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .kanban-card:active {
+      cursor: grabbing;
+      transform: scale(1.02);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    .kanban-card.dragging {
+      opacity: 0.5;
+    }
+    @media (max-width: 768px) {
+      .sidebar-desktop { display: none; }
+      .bottom-nav-mobile { display: flex; }
+    }
+    @media (min-width: 769px) {
+      .sidebar-desktop { display: flex; }
+      .bottom-nav-mobile { display: none; }
+    }
+    .sk-el {
+      background: linear-gradient(90deg, var(--b2) 25%, var(--b3) 50%, var(--b2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 0.5rem;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    /* Para modo oscuro */
+    [data-theme="dark"] .kanban-column.drag-over {
+      background-color: hsl(var(--p) / 0.15) !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-base-200" x-data="appShell()" x-init="initShell()">
+  <!-- Loading overlay -->
+  <div id="loading-overlay" style="display:none"></div>
+
+  <!-- App Shell -->
+  <div class="flex h-screen overflow-hidden">
+    <!-- Sidebar Desktop -->
+    <aside class="sidebar-desktop flex-col w-64 bg-base-100 border-r border-base-300 overflow-y-auto shrink-0">
+      <!-- Logo -->
+      <div class="p-4 border-b border-base-200">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-content font-bold text-lg shadow-sm">
+            <i class="bi bi-people-fill"></i>
+          </div>
+          <div>
+            <h1 class="font-bold text-base text-base-content">AHA CRM</h1>
+            <span class="text-xs text-base-content/50">Lite</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nav -->
+      <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
+        <template x-for="mod in modulos" :key="mod.id">
+          <a :href="'#/' + mod.id"
+             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-base-content/70 hover:bg-base-200 transition-colors"
+             :class="{ 'sidebar-link active-link': currentModule === mod.id }">
+            <i :class="'bi ' + mod.icono" class="text-lg w-6 text-center"></i>
+            <span class="text-sm font-medium" x-text="mod.titulo"></span>
+          </a>
+        </template>
+      </nav>
+
+      <!-- Footer sidebar -->
+      <div class="p-3 border-t border-base-200 space-y-1">
+        <button @click="exportBackup" class="flex items-center gap-3 px-3 py-2 rounded-xl text-base-content/60 hover:bg-base-200 w-full text-sm transition-colors">
+          <i class="bi bi-download text-lg w-6 text-center"></i>
+          <span>Exportar datos</span>
+        </button>
+        <button @click="importBackup" class="flex items-center gap-3 px-3 py-2 rounded-xl text-base-content/60 hover:bg-base-200 w-full text-sm transition-colors">
+          <i class="bi bi-upload text-lg w-6 text-center"></i>
+          <span>Importar datos</span>
+        </button>
+        <button @click="toggleTheme" class="flex items-center gap-3 px-3 py-2 rounded-xl text-base-content/60 hover:bg-base-200 w-full text-sm transition-colors">
+          <i class="bi bi-moon-stars text-lg w-6 text-center"></i>
+          <span>Modo oscuro</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- Top Nav -->
+      <header class="bg-base-100 border-b border-base-300 px-4 py-3 flex items-center gap-3 shrink-0">
+        <!-- Mobile menu toggle -->
+        <button class="btn btn-ghost btn-sm lg:hidden" @click="mobileSidebar = !mobileSidebar">
+          <i class="bi bi-list text-xl"></i>
+        </button>
+        <div class="flex-1">
+          <h2 class="text-lg font-bold text-base-content" x-text="currentTitle"></h2>
+        </div>
+        <!-- Status online -->
+        <div class="hidden sm:flex items-center gap-2 text-xs text-base-content/50">
+          <span :class="$store.network?.online ? 'badge-success' : 'badge-error'" class="badge badge-sm gap-1">
+            <i :class="$store.network?.online ? 'bi-wifi' : 'bi-wifi-off'"></i>
+            <span x-text="$store.network?.online ? 'En l\u00ednea' : 'Sin conexi\u00f3n'"></span>
+          </span>
+        </div>
+        <button class="btn btn-ghost btn-sm" @click="openSearch">
+          <i class="bi bi-search"></i>
+        </button>
+      </header>
+
+      <!-- Module Outlet -->
+      <div id="module-outlet" class="flex-1 overflow-y-auto p-4 md:p-6">
+        <div class="flex items-center justify-center py-20">
+          <span class="loading loading-spinner loading-lg text-primary"></span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Mobile Bottom Nav -->
+  <nav class="bottom-nav-mobile fixed bottom-0 inset-x-0 bg-base-100 border-t border-base-300 z-40 safe-area-bottom">
+    <div class="flex items-center justify-around py-1 px-2">
+      <template x-for="mod in modulos" :key="mod.id">
+        <a :href="'#/' + mod.id"
+           class="flex flex-col items-center gap-0.5 py-1.5 px-3 rounded-lg text-xs transition-colors"
+           :class="currentModule === mod.id ? 'text-primary' : 'text-base-content/50'">
+          <i :class="'bi ' + mod.icono" class="text-lg"></i>
+          <span class="text-[10px]" x-text="mod.titulo"></span>
+        </a>
+      </template>
+    </div>
+  </nav>
+
+  <!-- Search Palette (Cmd+K) -->
+  <div x-data="window.searchPalette"
+       @keydown.window.cmd.k.prevent="openPalette()"
+       @keydown.window.ctrl.k.prevent="openPalette()"
+       @keydown.window="onKeydown($event)">
+    <template x-teleport="body">
+      <div x-show="open" x-cloak class="fixed inset-0 z-[60] flex items-start justify-center pt-[12vh]"
+           @click.away="closePalette">
+        <div class="absolute inset-0 bg-base-300/60 backdrop-blur-sm"></div>
+        <div class="relative w-full max-w-xl">
+          <div class="bg-base-100 rounded-2xl shadow-2xl border border-base-300 overflow-hidden">
+            <div class="flex items-center gap-3 px-5 py-4 border-b border-base-200">
+              <svg class="w-5 h-5 text-base-content/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+              </svg>
+              <input x-model="query" type="text" class="sp-search-input flex-1 bg-transparent border-0 outline-none text-base placeholder:text-base-content/30"
+                     placeholder="Buscar m\u00f3dulos o registros...">
+              <kbd class="hidden sm:inline-flex px-2 py-0.5 text-xs rounded bg-base-200 text-base-content/50">ESC</kbd>
+            </div>
+            <div class="max-h-80 overflow-y-auto p-2">
+              <template x-if="!hasResults && query.length >= 2">
+                <div class="px-3 py-8 text-center text-sm text-base-content/40">
+                  <svg class="w-8 h-8 mx-auto mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  Sin resultados para "<span x-text="query"></span>"
+                </div>
+              </template>
+              <template x-if="!query">
+                <div class="px-3 py-2 text-xs font-semibold text-base-content/40 uppercase tracking-wider">M\u00f3dulos</div>
+              </template>
+              <template x-for="(item, i) in filtered" :key="i">
+                <template x-if="item.type === 'separator'">
+                  <div class="px-3 py-1.5 text-xs font-semibold text-base-content/30 uppercase tracking-wider">Registros</div>
+                </template>
+                <template x-if="item.type !== 'separator'">
+                  <div @click="selectItem(item)" @mouseenter="keyboardNav = false"
+                       :class="{'bg-primary/10 text-primary': keyboardNav && item._kIdx === selectedIdx, 'hover:bg-base-200': !(keyboardNav && item._kIdx === selectedIdx)}"
+                       class="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors">
+                    <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-base-200 text-base-content/60 shrink-0">
+                      <i :class="'bi ' + item.icon" class="text-sm"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium truncate" x-text="item.title"></div>
+                      <div x-show="item.subtitle" class="text-xs text-base-content/40 truncate" x-text="item.subtitle"></div>
+                    </div>
+                    <span x-show="item.type === 'module'" class="badge badge-ghost badge-sm">m\u00f3dulo</span>
+                    <span x-show="item.type === 'record'" class="badge badge-ghost badge-sm">registro</span>
+                  </div>
+                </template>
+              </template>
+            </div>
+            <div class="flex items-center gap-4 px-5 py-2.5 border-t border-base-200 text-xs text-base-content/40">
+              <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">\u2191\u2193</kbd> Navegar</span>
+              <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">\u21b5</kbd> Abrir</span>
+              <span class="flex items-center gap-1"><kbd class="kbd kbd-xs">Esc</kbd> Cerrar</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- JS Libraries -->
+  <script src="assets/js/libs/alpine.js"></script>
+  <script src="assets/js/libs/dexie.js"></script>
+  <script src="assets/js/libs/crypto-js.js"></script>
+  <script src="assets/js/libs/pako.js"></script>
+  <script src="assets/js/libs/chart.js"></script>
+  <script src="assets/js/libs/jspdf.js"></script>
+
+  <!-- Core -->
+  <script src="core/env.js"></script>
+  <script src="core/db.js"></script>
+  <script src="core/crypto.js"></script>
+  <script src="core/ui.js"></script>
+  <script src="core/theme.js"></script>
+  <script src="core/network.js"></script>
+  <script src="core/app.js"></script>
+  <script src="core/search-palette.js"></script>
+  <script src="core/file-store.js"></script>
+  <script src="core/sync.js"></script>
+  <script src="core/license.js"></script>
+
+  <!-- Modules -->
+  <script src="modules/contacto/module.js"></script>
+  <script src="modules/pipeline/module.js"></script>
+  <script src="modules/cotizaciones/module.js"></script>
+  <script src="modules/facturacion/module.js"></script>
+  <script src="modules/reportes/module.js"></script>
+
+  <!-- Seed -->
+  <script src="core/seed.js"></script>
+
+  <!-- Main -->
+  <script src="main.js"></script>
+
+  <script>
+    // Alpine store loading - debe ir justo tras Alpine.js
+    document.addEventListener('alpine:init', function() {
+      Alpine.store('loading', { phase: 'idle', visible: false });
+      Alpine.store('network', { online: navigator.onLine });
+    });
+
+    // App shell Alpine component
+    function appShell() {
+      return {
+        mobileSidebar: false,
+        currentModule: 'contacto',
+        modulos: [],
+        currentTitle: 'Contactos',
+
+        initShell: function() {
+          var self = this;
+          // Cargar modulos activos
+          var mods = [];
+          for (var id in APP_CONFIG.modulos) {
+            if (APP_CONFIG.modulos[id].activo) {
+              mods.push({ id: id, titulo: APP_CONFIG.modulos[id].titulo, icono: APP_CONFIG.modulos[id].icono });
+            }
+          }
+          this.modulos = mods;
+
+          // Escuchar cambios de hash
+          window.addEventListener('hashchange', function() {
+            var hash = window.location.hash.replace('#', '') || '/contacto';
+            var parts = hash.split('/');
+            var mid = parts[1] || 'contacto';
+            self.currentModule = mid;
+            self.currentTitle = APP_CONFIG.modulos[mid] ? APP_CONFIG.modulos[mid].titulo : 'CRM';
+          });
+
+          // Hash actual
+          var initialHash = window.location.hash.replace('#', '') || '/contacto';
+          var initialParts = initialHash.split('/');
+          var initialModule = initialParts[1] || 'contacto';
+          this.currentModule = initialModule;
+          this.currentTitle = APP_CONFIG.modulos[initialModule] ? APP_CONFIG.modulos[initialModule].titulo : 'CRM';
+        },
+
+        openSearch: function() {
+          if (window.searchPalette) {
+            window.searchPalette.openPalette();
+          }
+        },
+
+        toggleTheme: function() {
+          if (window.themeStore) {
+            window.themeStore.toggleModo();
+          }
+        },
+
+        exportBackup: function() {
+          SyncEngine.exportar();
+        },
+
+        importBackup: function() {
+          var input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.ateje-backup';
+          input.onchange = function(e) {
+            var file = e.target.files[0];
+            if (file) SyncEngine.importar(file);
+          };
+          input.click();
+        }
+      };
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!-- modules/facturacion/module.html -->
+<div x-data="facturacionData()" x-init="initData()" class="animate__animated animate__fadeInUp">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div><h2 class="text-2xl font-bold flex items-center gap-2"><i class="bi bi-receipt-cutoff text-primary"></i> Facturaci&oacute;n</h2><p class="text-sm text-base-content/50">Genera facturas desde deals cerrados</p></div>
+    <button class="btn btn-primary" @click="generarDesdeDeal()" :disabled="!dealsCerrados.length"><i class="bi bi-plus-lg"></i> Generar factura</button>
+  </div>
+  <div class="flex flex-wrap gap-3 mb-4">
+    <select x-model="filtroEstado" @change="filtrar()" class="select select-bordered select-sm"><option value="">Todos</option><option value="pagada">Pagada</option><option value="pendiente">Pendiente</option><option value="vencida">Vencida</option></select>
+    <span class="text-sm text-base-content/50 self-center">Total: <span class="font-semibold text-primary" x-text="UI.formatCurrency(totalGeneral)"></span></span>
+  </div>
+  <template x-if="cargando"><div class="space-y-3"><div class="sk-el h-16 w-full"></div><div class="sk-el h-16 w-full"></div><div class="sk-el h-16 w-full"></div></div></template>
+  <template x-if="!cargando && filtrados.length">
+    <div class="overflow-x-auto rounded-xl border border-base-300">
+      <table class="table table-zebra">
+        <thead><tr><th>Folio</th><th class="hidden md:table-cell">Cliente</th><th>Total</th><th class="hidden sm:table-cell">Estado</th><th>Acciones</th></tr></thead>
+        <tbody>
+          <template x-for="item in filtrados" :key="item.id">
+            <tr class="hover">
+              <td><span class="font-mono font-medium" x-text="item.folio"></span></td>
+              <td class="hidden md:table-cell text-base-content/70" x-text="item.contactoNombre || '&mdash;'"></td>
+              <td class="font-semibold" x-text="UI.formatCurrency(item.total)"></td>
+              <td class="hidden sm:table-cell"><span class="badge" :class="{'badge-success': item.estado==='pagada','badge-warning': item.estado==='pendiente','badge-error': item.estado==='vencida'}" x-text="item.estado"></span></td>
+              <td><div class="flex gap-1"><button class="btn btn-sm btn-ghost btn-square" @click="toggleEstado(item)" title="Cambiar estado"><i class="bi bi-check-circle"></i></button><button class="btn btn-sm btn-ghost btn-square" @click="exportPDF(item)" title="PDF"><i class="bi bi-file-earmark-pdf"></i></button><button class="btn btn-sm btn-ghost btn-square text-error" @click="eliminar(item)" title="Eliminar"><i class="bi bi-trash"></i></button></div></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </template>
+  <template x-if="!cargando && !filtrados.length">
+    <div class="flex flex-col items-center justify-center py-20 text-base-content/40"><i class="bi bi-receipt text-6xl mb-4"></i><p class="text-lg mb-1 font-medium">No hay facturas</p><p class="text-sm mb-6">Genera desde deals cerrados</p><template x-if="!dealsCerrados.length"><p class="text-xs">Cierra un deal en el pipeline primero.</p></template><template x-if="dealsCerrados.length"><button class="btn btn-primary" @click="generarDesdeDeal()"><i class="bi bi-plus-lg"></i> Generar factura</button></template></div>
+  </template>
+</div>
